@@ -1,8 +1,8 @@
 # RenderSystem
 
-The `RenderSystem` handles drawing entities to the Canvas 2D context. It applies transform (translate/rotate/scale), delegates drawing to the entity's `Renderable`, and supports optional viewport culling.
+The `RenderSystem` handles drawing entities to the Canvas 2D context. It applies the current `Camera` transform, performs viewport culling, and delegates drawing to each entity's `Renderable`.
 
-A singleton `renderSystem` instance is exported and used internally by `Sprite.render()` and `Group.render()`.
+A singleton `renderSystem` instance is exported and used internally by various workflows.
 
 ## Constructor
 
@@ -12,44 +12,73 @@ new RenderSystem()
 
 ## Methods
 
-### `render(ctx, entities, viewport?)`
+### `render(ctx, entities, camera?)`
 
 ```js
 renderSystem.render(ctx, entities)
-renderSystem.render(ctx, entities, viewport)
+renderSystem.render(ctx, entities, camera)
 ```
 
-Iterates over an array of entities and calls `renderOne` on each.
+Renders all visible entities. Steps:
+1. Uses the provided camera, `Camera.main`, or identity (no transform) if none
+2. Derives view bounds from the camera for culling
+3. Applies the camera transform to the context
+4. Iterates entities, culling those outside the viewport
+5. Draws each entity via `_drawEntity`
 
-### `renderOne(ctx, entity, viewport?)`
+### `renderOne(ctx, entity, camera?)`
 
 ```js
 renderSystem.renderOne(ctx, entity)
-renderSystem.renderOne(ctx, entity, viewport)
+renderSystem.renderOne(ctx, entity, camera)
 ```
 
-Renders a single entity. Steps:
-1. Skips if `entity.visible` is `false`
-2. If a `viewport` is provided, performs culling — skips entities outside the viewport bounds
-3. Saves the context, translates to `(transform.x, transform.y)`, rotates by `transform.rotation`, scales by `transform.scale`
-4. Calls `entity.renderable.draw(ctx, collider.width, collider.height)`
-5. Restores the context
+Renders a single entity with the same camera/culling logic.
+
+## Camera Integration
+
+`RenderSystem` accepts a `Camera` instance instead of a generic viewport rect:
+
+```js
+const camera = new Camera(400, 300, 800, 600)
+renderSystem.render(ctx, allEntities, camera)
+renderSystem.renderOne(ctx, player, camera)
+```
+
+If no camera is provided, it falls back to `Camera.main`. If no camera exists at all, entities render without any viewport transform (identity).
 
 ## Viewport Culling
 
-When a `viewport` rect `{ x, y, w, h }` is passed, entities entirely outside the viewport are skipped. For rotated or scaled entities, a bounding radius check is used for conservative culling.
+The system derives visible world bounds from the camera's position, zoom, and viewport size. Entities entirely outside these bounds are skipped. For rotated/scaled entities, a conservative bounding radius is used.
 
-```js
-const viewport = { x: camera.x, y: camera.y, w: 800, h: 600 }
-renderSystem.render(ctx, allEntities, viewport)
-```
+## Drawing
+
+### `_drawEntity(ctx, entity)`
+
+Internal method that applies the entity's transform (translate, rotate, scale) and calls `entity.renderable.draw(ctx, collider.width, collider.height)`.
 
 ## Default Singleton
 
 ```js
-import { renderSystem } from 'jygame'
+import { renderSystem, Camera } from 'jygame'
 
-// Used automatically by Sprite and Group
-sprite.render(ctx)            // calls renderSystem.renderOne(ctx, sprite)
-group.render(ctx, viewport)    // calls renderSystem.render(ctx, group._sprites, viewport)
+const camera = new Camera(0, 0, 800, 600)
+Camera.setMain(camera)
+
+// RenderSystem uses Camera.main automatically
+renderSystem.render(ctx, allEntities)
+renderSystem.renderOne(ctx, player)
+```
+
+## Standalone Usage
+
+```js
+import { renderSystem, Camera, Sprite } from 'jygame'
+
+const camera = new Camera(400, 300, 800, 600)
+camera.follow(player)
+
+// Each frame
+ctx.clearRect(0, 0, 800, 600)
+renderSystem.render(ctx, allEntities, camera)
 ```

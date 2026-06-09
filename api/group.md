@@ -1,6 +1,6 @@
 # Group
 
-The `Group` class manages collections of sprites with batch operations, collision queries, and optional spatial hashing for fast broad-phase collision.
+The `Group` class is a pure iterable container for sprites. It does NOT own `update` or `render` logic — use systems directly. Collision queries delegate to `CollisionSystem`.
 
 ## Constructor
 
@@ -16,34 +16,30 @@ const group = new Group()
 | `remove(sprite)` | Removes a sprite and its group reference. |
 | `has(sprite)` | Returns `boolean`. |
 | `clear()` | Removes all sprites and cleans up group references. |
+| `dispose()` | Unregisters from `CollisionSystem` and calls `clear()`. |
 | `length` (getter) | Returns the number of sprites. |
-
-## Batch Operations
+| `[Symbol.iterator]()` | Makes the group iterable (`for...of`, spread, etc.) |
 
 ```js
-group.update(dt)            // delegates to movementSystem.update() — applies velocity to all sprites
-group.render(ctx)           // delegates to renderSystem.render() — draws all visible sprites
-group.render(ctx, viewport) // same, with viewport culling
+for (const sprite of group) {
+  movementSystem.updateOne(sprite, dt)
+  renderSystem.renderOne(ctx, sprite)
+}
 ```
 
 ## Spatial Hash
 
-Enable spatial hashing for accelerated collision detection on large groups:
+Enable spatial hashing for accelerated collision detection:
 
 ```js
 group.useSpatialHash(cellSize)  // returns this for chaining
 ```
 
-| Method | Description |
-|--------|-------------|
-| `useSpatialHash(cellSize = 64)` | Enables spatial partitioning with the given cell size |
-| `rebuildSpatialHash()` | Manually rebuilds the spatial hash (automatically rebuilt on `update()`) |
-
-When spatial hashing is active, `update()` automatically rebuilds the hash after applying movement. Collision queries use the hash to only check sprites in nearby cells.
+Delegates to `collisionSystem.useSpatialHash(this, this._sprites, cellSize)`.
 
 ## Collision Queries
 
-All methods automatically skip invisible sprites. Every method accepts an optional `out` array parameter for pool-friendly reuse.
+All methods skip invisible sprites and accept an optional `out` array for pool-friendly reuse. All delegate to `CollisionSystem`.
 
 | Method | Signature | Returns | Description |
 |--------|-----------|---------|-------------|
@@ -55,18 +51,15 @@ All methods automatically skip invisible sprites. Every method accepts an option
 ```js
 const hits = group.collideRect(rect)
 hits.forEach(s => s.kill())
+```
 
-const pairs = bullets.collideGroup(enemies)
-pairs.forEach(([bullet, enemy]) => {
+`collideGroup` also accepts a callback for zero-alloc collision processing:
+
+```js
+bullets.collideGroup(enemies, (bullet, enemy) => {
   bullet.kill()
   enemy.health--
 })
-
-// Pool-friendly reuse
-const out = []
-group.collideRect(rect, out)
-// use out, then clear it
-out.length = 0
 ```
 
 ## Array Utilities
@@ -79,13 +72,13 @@ out.length = 0
 
 ```js
 group.forEach(s => s.health -= 1)
-const alive = group.filter(s => s.health > 0)
-const positions = group.map(s => ({ x: s.x, y: s.y }))
 ```
 
 ## Example
 
 ```js
+import { Scene, Group, Sprite, movementSystem, renderSystem } from 'jygame'
+
 const enemies = new Group()
 
 for (let i = 0; i < 10; i++) {
@@ -94,16 +87,20 @@ for (let i = 0; i < 10; i++) {
   enemies.add(enemy)
 }
 
-// Enable spatial hashing for large groups
 enemies.useSpatialHash(64)
 
-function update(dt) {
-  enemies.update(dt)
+const scene = new Scene()
+scene.update = function (dt) {
+  for (const sprite of enemies) {
+    movementSystem.updateOne(sprite, dt)
+  }
   const hits = enemies.collideRect(playerRect)
   hits.forEach(s => s.kill())
 }
 
-function render(ctx) {
-  enemies.render(ctx)
+scene.render = function (ctx) {
+  for (const sprite of enemies) {
+    renderSystem.renderOne(ctx, sprite)
+  }
 }
 ```

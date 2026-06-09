@@ -2,280 +2,289 @@
 
 ## Project Structure
 
-Organize your game by feature or module, not by file type.
-
 ```
 my-game/
 ├── index.html
 ├── src/
 │   ├── main.js              # Entry point — creates Game, runs initial scene
-│   ├── scenes/
-│   │   ├── MenuScene.js     # One file per scene
+│   ├── scenes/              # One file per scene
+│   │   ├── MenuScene.js
 │   │   ├── GameScene.js
-│   │   └── GameOverScene.js
-│   ├── entities/
-│   │   ├── Player.js        # Sprites and their behavior
-│   │   ├── Enemy.js
-│   │   └── PowerUp.js
-│   ├── systems/
-│   │   ├── spawner.js       # Game logic separated from scenes
-│   │   └── score.js
+│   │   └── PauseScene.js
+│   ├── entities/            # Sprite factories or custom entity definitions
+│   ├── systems/             # Game logic separated from scenes
 │   └── assets/
-│       ├── images/
-│       └── fonts/
 ├── package.json
 └── vite.config.js
 ```
 
-Keep scenes focused. If a scene exceeds 200 lines, extract entities or systems into separate files.
+Keep scenes focused. If a scene exceeds 200 lines, extract logic into separate files.
 
 ## Scene Lifecycle
 
-### Setup in `enter()`, Teardown in `exit()`
+### Scenes Are Single-Use
 
-Use `enter()` to create sprites and register listeners. Use `exit()` to clean up — use `this.on()` so cleanup is automatic.
+Create a new scene instance each time you enter a state. Never re-use an exited scene.
+
+```js
+// ✅ Correct
+game.switchScene(new MenuScene())
+
+// ❌ Error: scene already exited
+game.switchScene(menuScene)
+game.switchScene(menuScene)
+```
+
+### Setup in `enter()`, Teardown in `exit()`
 
 ```js
 class GameScene extends Scene {
   enter() {
     this.player = new Sprite(100, 100, 32, 32)
     this.on(Input, 'keydown', this.handleInput)
-    this.onSwipe(dir => this.player.x += 50)
   }
 }
 ```
 
-### Don't Recreate Sprites Every Frame
+### Use the Scene Stack
 
-Create sprites once in `enter()`, not in `update()`.
-
-```js
-// ❌ Bad
-enter() {
-  this.enemies = new Group()
-}
-update(dt) {
-  this.enemies.clear()
-  // add enemies every frame...
-}
-
-// ✅ Better — spawn conditionally
-update(dt) {
-  if (this.spawnTimer.tick(dt)) {
-    this.enemies.add(new Enemy())
-  }
-}
-```
-
-## Components & Entities
-
-### Work with Components Directly
-
-Sprites expose `transform`, `collider`, `renderable`, and `velocity`. Access them directly for fine-grained control:
+Push overlays (pause, inventory) on top instead of switching scenes:
 
 ```js
-sprite.transform.rotation = Math.PI / 2
-sprite.transform.scale.set(2, 1)
-sprite.collider.width = 64
-sprite.renderable.style.shape = 'ellipse'
-```
-
-Note that `x` and `y` getters return the **top-left corner**, while `transform.x` / `transform.y` is **center-based**:
-
-```js
-const s = new Sprite(100, 100, 32, 32)
-s.x                   // 100 (top-left)
-s.transform.x         // 116 (center)
-```
-
-### Build Custom Entities
-
-Any object with the right component shape works with the built-in systems:
-
-```js
-const bullet = {
-  transform: new Transform(x, y),
-  collider: new Collider(4, 4),
-  renderable: new Renderable(null, { fill: '#ff0', shape: 'circle' }),
-  velocity: new Vec2(0, -300),
-  visible: true,
-}
-
-movementSystem.updateOne(bullet, dt)
-renderSystem.renderOne(ctx, bullet)
-```
-
-## Sprites
-
-### Use `Pool` for Frequently Spawned Objects
-
-For frequently spawned objects (bullets, particles), use the built-in `Pool` class instead of manual pooling:
-
-```js
-const bulletPool = new Pool({
-  create: () => new Sprite(0, 0, 4, 4),
-  reset: (b) => {
-    b.visible = false
-    b.velocity.set(0, 0)
-    b.transform.x = 0
-    b.transform.y = 0
-  },
-  initialSize: 50,
-  maxSize: 200,
-})
-
-function fire(x, y, vx, vy) {
-  const b = bulletPool.acquire()
-  b.transform.x = x
-  b.transform.y = y
-  b.velocity.set(vx, vy)
-  b.visible = true
-  return b
-}
-
-function update(dt) {
-  for (const b of activeBullets) {
-    if (outOfBounds(b)) {
-      bulletPool.release(b)
+class GameScene extends Scene {
+  update(dt) {
+    if (Input.justPressed('ESCAPE')) {
+      this.pushScene(new PauseScene())
     }
   }
 }
 ```
 
-### Use `kill()` to Remove Sprites from Groups
+### Blocking Behaviour
 
 ```js
-sprite.kill()  // removes from all groups it belongs to
+// Pause overlay — blocks updates below but renders on top
+class PauseScene extends Scene {
+  constructor() {
+    super()
+    this.blocksUpdateBelow = true
+    this.blocksRenderBelow = false
+  }
+}
 ```
 
-## Groups & Spatial Hashing
+## Sprites & ECS
+
+### Sprites Are Data, Not Objects
+
+Sprites no longer have `update()` or `render()` — use systems:
+
+```js
+// ❌ Old pattern (v0.4.0)
+sprite.update(dt)
+sprite.render(ctx)
+
+// ✅ v0.5.0
+movementSystem.updateOne(sprite, dt)
+renderSystem.renderOne(ctx, sprite)
+animationSystem.updateOne(sprite, dt)
+```
+
+### Build Custom Entities
+
+Any object with the right components works with built-in systems:
+
+```js
+const particle = {
+  transform: new Transform(x, y),
+  collider: new Collider(4, 4),
+  renderable: new Renderable(null, { fill: '#ff0', shape: 'circle' }),
+  velocity: new Vec2(0, -100),
+  visible: true,
+}
+
+movementSystem.updateOne(particle, dt)
+renderSystem.renderOne(ctx, particle)
+```
+
+### Use `ActivePool` for Frequent Spawning
+
+```js
+const bulletPool = new ActivePool({
+  create: () => new Sprite(0, 0, 4, 4),
+  reset: (b) => { b.visible = false; b.velocity.set(0, 0) },
+  initialSize: 50,
+})
+
+function update(dt) {
+  bulletPool.updateActive(b => {
+    movementSystem.updateOne(b, dt)
+    if (outOfBounds(b)) bulletPool.release(b)
+  })
+}
+
+function render(ctx) {
+  bulletPool.forEachActive(b => renderSystem.renderOne(ctx, b))
+}
+```
+
+## Groups
+
+### Groups Are Containers Only
+
+Groups no longer have `update` or `render` — iterate manually:
+
+```js
+// ✅ v0.5.0
+for (const sprite of group) {
+  movementSystem.updateOne(sprite, dt)
+}
+```
+
+### Use `dispose()` for Cleanup
+
+```js
+group.dispose()  // unregisters from CollisionSystem + clears
+```
 
 ### Enable Spatial Hash for Large Groups
 
-For groups with more than ~50 sprites, enable spatial hashing to accelerate collision queries:
-
 ```js
-const enemies = new Group()
-enemies.useSpatialHash(64)  // cell size in pixels
-enemies.add(enemy1)
-// ...
+group.useSpatialHash(64)
 ```
 
-The hash is automatically rebuilt when `update()` is called. Without spatial hash, collision queries are O(n) per group.
-
-### Use `collideGroup()` for Group-vs-Group
+### Prefer Callback Style for Group Collisions
 
 ```js
-const hits = this.bullets.collideGroup(this.enemies)
-hits.forEach(([bullet, enemy]) => {
+// Zero-alloc — no array created
+bullets.collideGroup(enemies, (bullet, enemy) => {
   bullet.kill()
   enemy.health--
 })
+
+// Array style — allocates
+const pairs = bullets.collideGroup(enemies)
 ```
 
-### All Collision Methods Accept `out` for Pool Reuse
+## Camera
+
+### Set Up a Camera Early
 
 ```js
-const out = []
-group.collideRect(rect, out)
-// use out, then clear
-out.length = 0
+const camera = new Camera(400, 300, 800, 600)  // becomes Camera.main
+```
+
+### Follow the Player
+
+```js
+scene.update = function (dt) {
+  camera.follow(player)
+}
+```
+
+### Convert Coordinates
+
+```js
+const worldPos = {}
+camera.screenToWorld(mouseX, mouseY, worldPos)
+```
+
+## Animation
+
+### Define Clips with Arrays of Preloaded Images
+
+```js
+const frames = await Promise.all([
+  ImageLoader.load('walk1.png'),
+  ImageLoader.load('walk2.png'),
+  ImageLoader.load('walk3.png'),
+  ImageLoader.load('walk4.png'),
+])
+
+player.animation.add('walk', { frames, fps: 8, loop: true })
+```
+
+### Advance Animation in Update
+
+```js
+scene.update = function (dt) {
+  animationSystem.updateOne(player, dt)
+}
 ```
 
 ## Input
 
-### Use `justPressed` for One-Shot Actions
-
-Use `justPressed` for actions that should fire once per press (jumping, shooting, confirming).
+### Use Action Bindings Over Raw Keys
 
 ```js
-if (Input.justPressed('SPACE')) this.player.jump()
-if (Input.justPressed('ENTER')) this.transitionTo(nextScene)
-```
-
-### Use `isDown` for Continuous Actions
-
-Use `isDown` for actions that repeat every frame (movement, charging).
-
-```js
-if (Input.isDown('RIGHT')) this.player.x += 200 * dt
-```
-
-### Use Logical Mappings, Not Raw Keys
-
-Don't hardcode raw key checks:
-
-```js
-// ❌ Bad
-if (Input.isDown('w')) moveUp()
-
 // ✅ Good
-Input.mapKey('z', 'JUMP')
+Input.bind('JUMP', 'SPACE')
+Input.bind('JUMP', 'W')
 if (Input.justPressed('JUMP')) jump()
+
+// ❌ Avoid
+if (Input.justPressed('SPACE') || Input.justPressed('W')) jump()
 ```
 
-### Reset Input on Scene Switch
+### Action Bindings Replace Manual Remapping for Common Cases
 
-`game.switchScene()` clears input state automatically. When using raw DOM listeners, clean them up via `this.on()`.
-
-### Pointer API for Multi-Touch
-
-For multi-touch games, use the pointer API directly:
+For simple multi-key actions, `bind()` is more ergonomic than `mapKey()`:
 
 ```js
-Input.forEachPointer(p => {
-  if (p.pointerType === 'touch') {
-    // handle touch input
-  }
-})
+Input.bind('FIRE', 'z')
+Input.bind('FIRE', 'x')
+Input.bind('FIRE', 'ENTER')
 ```
 
-## Scene Event Cleanup
+## Collision
 
-Always use `this.on()` instead of raw `addEventListener` to ensure listeners are cleaned up on scene exit:
+### Centralize with CollisionSystem
+
+`CollisionSystem` manages all collision state and spatial hashes. Use it directly for custom entity arrays:
 
 ```js
-scene.enter = function () {
-  this.on(document, 'keydown', this.handleKey)
-  this.onSwipe(dir => this.move(dir))
-  this.onTap(({ x, y }) => this.placeItem(x, y))
-  this.cleanup(() => {
-    // any custom teardown
-  })
-}
+collisionSystem.useSpatialHash(myEntities, myEntities)
+collisionSystem.beginFrame()  // rebuild all hashes
+collisionSystem.collideRect(myEntities, rect)
 ```
 
-No manual `removeEventListener` is needed — `scene.exit()` runs all cleanups automatically.
+### Group Methods Delegate Automatically
+
+```js
+group.useSpatialHash(64)  // registers with collisionSystem
+group.collideRect(rect)   // delegates to collisionSystem
+```
 
 ## Game Loop
 
-### Don't Assume `dt` Consistency
-
-The fixed timestep ensures consistent updates, but `render()` runs at display refresh rate. Never put simulation logic in `render()`:
+### Never Put Simulation Logic in `render()`
 
 ```js
 // ❌ Bad
 render(ctx) {
-  this.player.x += 5  // frame-rate dependent!
-  this.player.render(ctx)
+  player.velocity.x = 5     // frame-rate dependent!
+  player.render(ctx)
 }
 
 // ✅ Good
 update(dt) {
-  this.player.x += 200 * dt  // 200 px/sec regardless of FPS
+  player.velocity.x = 200
+  movementSystem.updateOne(player, dt)
 }
 render(ctx) {
-  this.player.render(ctx)
+  renderSystem.renderOne(ctx, player)
 }
 ```
 
-### Pause the Game Loop Properly
+### Scene Operations Are Safe During Update
 
-Use `game.pause()` / `game.resume()` instead of manual flags. The loop stops calling `update()` but `render()` still runs (allowing a dimmed overlay). Auto-pause handles tab visibility automatically.
+Scene mutations called inside `update()` are deferred and applied after the update cycle:
 
 ```js
-if (Input.justPressed('ESCAPE')) {
-  game.isPaused ? game.resume() : game.pause()
+scene.update = function (dt) {
+  if (Input.justPressed('ESCAPE')) {
+    this.pushScene(new PauseScene())  // queued, not applied immediately
+  }
 }
 ```
 
@@ -283,31 +292,18 @@ if (Input.justPressed('ESCAPE')) {
 
 ### Keep UI State Separate from Game State
 
-Use `State` for game data (score, health, level) and scene properties for UI state (selected menu option, animation timer):
-
 ```js
-const gameState = new State({ score: 0, lives: 3, level: 1 })
+const gameState = new State({ score: 0, lives: 3 })
+this.selectedOption = 0     // scene-local UI state
 
-// In scene
-this.selectedOption = 0     // UI state — scene-local
-this.flashTimer = 0         // animation state — scene-local
-```
-
-### Subscribe to State Changes for UI
-
-Instead of checking state in `update()`, use subscriptions:
-
-```js
-gameState.subscribe(state => {
-  game.patchUI({ score: `Score: ${state.score}` })
+gameState.subscribe(s => {
+  game.patchUI({ score: `Score: ${s.score}` })
 })
 ```
 
 ## Asset Loading
 
-### Preload Assets Before Starting
-
-Load all assets in a boot or menu scene, then switch to gameplay:
+### Preload and Use Progress
 
 ```js
 class BootScene extends Scene {
@@ -315,56 +311,36 @@ class BootScene extends Scene {
     const task = ImageLoader.loadAll({
       player: 'player.png',
       enemy: 'enemy.png',
-      bg: 'background.png',
     })
-
-    task.onProgress((loaded, total) => {
-      console.log(`${Math.round(loaded / total * 100)}%`)
-    })
-
-    const assets = await task
-    await FontLoader.loadAll({ Pixel: 'pixel.woff2' })
-    this.transitionTo(new MenuScene(assets))
+    task.onProgress((l, t) => console.log(`${Math.round(l/t*100)}%`))
+    await task
+    this.switchScene(new MenuScene())
   }
-}
-```
-
-### Handle Loading Errors
-
-```js
-try {
-  const assets = await ImageLoader.loadAll({ ... })
-} catch (err) {
-  console.warn('Failed to load assets:', err)
 }
 ```
 
 ## Performance
 
-### Keep Sprite Count Manageable
+### Use `ActivePool` for All Hot Objects
 
-For very large numbers of static sprites, batch them by rendering to an offscreen canvas. Only update and re-render sprites that change.
+Prefer `ActivePool` over raw `Pool` for frequently created/destroyed objects — it tracks active objects so you never iterate inactive ones.
 
-### Enable Spatial Hash for Large Groups
-
-Groups with many sprites benefit significantly from spatial hashing — it reduces collision checks from O(n²) to roughly O(n).
-
-### Minimize DOM UI Updates
-
-Use `game.patchUI({ id: value })` instead of `game.refreshUI()` when updating only specific elements. `patchUI` only changes elements where the content differs.
-
-### Clean Up Unused Resources
-
-Sprites removed from groups but still referenced can cause memory leaks. Call `kill()` and remove references:
+### Use Callback-Style Collision to Avoid Allocations
 
 ```js
-this.enemies = this.enemies.filter(s => s.health > 0)
+group.collideGroup(other, (a, b) => { ... })  // no array allocated
 ```
 
-### Use `visible` to Hide Sprites
+### Enable Spatial Hash for Groups > 50 Entities
 
-Setting `sprite.visible = false` skips rendering without destroying the sprite. Useful for pooling.
+### Use Pool-Friendly Methods
 
-### Use Pool-Friendly Code Paths
+```js
+Vec2.lerpInto(out, a, b, t)     // no allocation
+rect.getCenter(out)             // no allocation
+group.collideRect(rect, out)    // reuse output array
+```
 
-Methods like `group.collideRect(rect, out)`, `rect.getCenter(out)`, and `Vec2.lerpInto(out, a, b, t)` accept an optional output parameter to avoid allocations in hot paths.
+### Set Up Camera for Viewport Culling
+
+Camera-based rendering automatically culls off-screen entities.

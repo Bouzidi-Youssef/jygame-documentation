@@ -1,6 +1,6 @@
 # Sprite
 
-The `Sprite` class is the basic drawable entity. It is composed of **components** — `Transform` (position/rotation/scale), `Collider` (AABB size), `Renderable` (image/style), and a `velocity` Vec2 — with dedicated systems handling update and render logic.
+The `Sprite` class is a data entity composed of **components** — `Transform`, `Collider`, `Renderable`, `Animation`, and a `velocity` Vec2. Sprites have no built-in `update` or `render` methods — **systems** handle all behavior.
 
 ## Constructor
 
@@ -21,31 +21,16 @@ Creates a sprite with top-left corner at `(x, y)` and the given size. Internally
 | `transform` | `Transform` | Spatial state: `x`, `y`, `rotation`, `scale` |
 | `collider` | `Collider` | AABB collision volume: `width`, `height` |
 | `renderable` | `Renderable` | Visual state: `image`, `style` |
-| `velocity` | `Vec2` | Velocity vector (applied each frame by `MovementSystem`) |
-| `visible` | `boolean` | `true` — set to `false` to skip rendering |
+| `animation` | `Animation` | Animation component: named clips, current frame, playing state |
+| `velocity` | `Vec2` | Velocity vector (consumed by `MovementSystem`) |
+| `visible` | `boolean` | `true` — set to `false` to skip rendering and collision |
 | `angle` | `number` | Rotation in radians (delegates to `transform.rotation`) |
 | `scale` | `Vec2` | Scale factor (delegates to `transform.scale`) |
 | `image` | `HTMLImageElement \| null` | Optional image (delegates to `renderable.image`) |
 | `style` | `object` | `{ fill, shape }` style config (delegates to `renderable.style`) |
-| `groups` | `Sprite[]` | Groups this sprite belongs to |
+| `groups` | `Group[]` | Groups this sprite belongs to |
 
 ## Methods
-
-### `update(dt)`
-
-```js
-sprite.update(dt)
-```
-
-Delegates to `movementSystem.updateOne(this, dt)` — applies `velocity * dt` to `transform.x` and `transform.y`.
-
-### `render(ctx)`
-
-```js
-sprite.render(ctx)
-```
-
-Delegates to `renderSystem.renderOne(ctx, this)` — applies transform, delegates drawing to `renderable.draw()`.
 
 ### `kill()`
 
@@ -54,6 +39,19 @@ sprite.kill()
 ```
 
 Removes the sprite from all groups it belongs to and clears `this.groups`.
+
+## Systems Operating on Sprites
+
+Since `Sprite` is a data entity, you use systems to process it:
+
+```js
+import { movementSystem, renderSystem, animationSystem } from 'jygame'
+
+// Each frame
+movementSystem.updateOne(player, dt)      // applies velocity to transform
+animationSystem.updateOne(player, dt)     // advances animation frames
+renderSystem.renderOne(ctx, player)       // draws the sprite
+```
 
 ## Style
 
@@ -72,35 +70,25 @@ sprite.image = await ImageLoader.load('/assets/player.png')
 ## Example
 
 ```js
+import { Game, Scene, Sprite, movementSystem, renderSystem, Input } from 'jygame'
+
 const player = new Sprite(100, 200, 32, 48)
 player.style.fill = '#63B44E'
-player.velocity.set(200, 0)
-player.angle = Math.PI / 4
 
-function update(dt) {
-  player.update(dt)
+const scene = new Scene()
+scene.update = function (dt) {
+  if (Input.isDown('RIGHT')) player.velocity.x = 200
+  else if (Input.isDown('LEFT')) player.velocity.x = -200
+  else player.velocity.x = 0
+
+  movementSystem.updateOne(player, dt)
 }
 
-function render(ctx) {
-  player.render(ctx)
+scene.render = function (ctx) {
+  ctx.clearRect(0, 0, 800, 600)
+  renderSystem.renderOne(ctx, player)
 }
-```
 
-## Working with Components Directly
-
-```js
-// Position — x/y getters return top-left corner
-player.x = 100
-player.y = 200
-
-// Transform center (used internally for rotation/scale)
-player.transform.x = 116   // 100 + 32/2
-player.transform.rotation = Math.PI / 2
-
-// Collider
-player.collider.width = 64
-
-// Renderable
-player.renderable.style.shape = 'ellipse'
-player.renderable.image = myImg
+const game = new Game({ width: 800, height: 600 })
+game.run(scene)
 ```

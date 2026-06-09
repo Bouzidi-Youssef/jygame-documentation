@@ -19,18 +19,18 @@ hero:
 features:
   - title: Zero Dependencies
     details: Pure vanilla JavaScript ES modules. No bundlers, no frameworks, no bloat. Just import and play.
-  - title: Canvas + DOM Hybrid
-    details: Render game graphics on Canvas 2D while layering HTML UI elements on top — best of both worlds.
-  - title: Component Architecture
-    details: Sprite entities composed of Transform, Collider, and Renderable components with dedicated Movement and Render systems.
-  - title: Spatial Acceleration
-    details: Built-in SpatialHash broad-phase collision for fast queries on large groups, plus object pooling for memory efficiency.
+  - title: Pure ECS Architecture
+    details: Entity-Component-System design. Sprites are data entities; dedicated systems handle movement, rendering, animation, and collision.
+  - title: Scene Stack
+    details: Stack-based scene management with pause/resume, blocking rules, and deferred operations for safe mid-frame transitions.
+  - title: Camera System
+    details: 2D camera with position, zoom, and rotation. Viewport culling, world-to-screen conversion, and follow-target support.
+  - title: Animation System
+    details: Frame-based sprite animations with per-clip FPS, looping, and completion callbacks — driven by a dedicated AnimationSystem.
   - title: Pointer & Multi-Touch Input
-    details: Unified Pointer Events API with multi-touch tracking, swipe and tap gestures, and per-scene InputContext instances.
-  - title: Scene Management
-    details: Lifecycle hooks with auto-cleaning event listeners, interpolation support, and smooth scene transitions.
-  - title: Math & Geometry
-    details: Vec2 and Rect classes with pool-friendly out parameters for zero-allocation hot paths.
-  - title: Asset Loading
-    details: Image and Font loaders with progress tracking (LoadingTask), batch loading, and individual asset unloading.
+    details: Unified Pointer Events API with action bindings, multi-touch tracking, swipe and tap gestures, and per-scene InputContext instances.
+  - title: Advanced Object Pooling
+    details: ActivePool with O(1) acquire/release, active tracking, batch operations, and instrumentation for tuning memory pressure.
+  - title: Collision System
+    details: Centralized collision detection with spatial hashing, callback-based zero-alloc queries, and automatic broad-phase management.
 ---

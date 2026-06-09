@@ -1,6 +1,6 @@
 # Game
 
-The `Game` class is the main entry point. It manages the game loop, canvas setup, scene management, viewport scaling, input, and the DOM UI overlay.
+The `Game` class manages the game loop, a **scene stack**, canvas setup, viewport scaling, input, and the DOM UI overlay.
 
 ## Constructor
 
@@ -28,39 +28,80 @@ const game = new Game(options)
 | `ctx` | `CanvasRenderingContext2D` | 2D rendering context |
 | `width` | `number` | Logical canvas width |
 | `height` | `number` | Logical canvas height |
-| `scene` | `Scene \| null` | Current active scene |
+| `scene` | `Scene \| null` | Current top scene (getter — returns `peekScene()`) |
+| `sceneCount` | `number` | Number of scenes on the stack (getter) |
 | `clock` | `Clock` | Internal fixed-timestep clock |
 | `input` | `InputContext` | The game's input context instance |
 | `fps` | `number` | Smoothed real-time FPS (read-only) |
 | `isPaused` | `boolean` | Whether the game is paused (getter) |
 
-The `Game` constructor creates an `InputContext`, binds it to the game container, and sets it as the global default — so `Input.isDown()` etc. work without extra setup.
+## Scene Stack
 
-## Lifecycle Methods
+The game manages a **stack of scenes**. The top scene receives events; scenes below can be optionally blocked from updates/rendering via scene properties (`blocksUpdateBelow`, `blocksRenderBelow`).
 
 ### `run(scene)`
 
-Starts the game loop with a `Scene` instance. Sets `scene.game = this`, appends `scene.root` to the DOM overlay, calls `scene.enter()`, and begins the game loop.
+Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls `scene.enter()`, and begins the loop.
 
 ```js
 game.run(new MenuScene())
 ```
 
-### `switchScene(scene)`
+### `pushScene(scene)`
 
-Exits the current scene, removes its DOM root, resets pause state, clears input, resets the clock, and enters the new scene.
+Pushes a scene onto the stack on top of the current one. If the current scene has `blocksUpdateBelow = true` (default), it is paused. Scene operations are deferred if called during an update cycle.
 
 ```js
-game.switchScene(new GameScene())
+// Pause overlay on top of gameplay
+game.pushScene(new PauseScene())
 ```
+
+### `popScene()`
+
+Pops the top scene from the stack. If the popped scene had `blocksUpdateBelow = true`, the scene below is resumed. Throws if only one scene remains.
+
+```js
+game.popScene()
+```
+
+### `replaceScene(scene)`
+
+Replaces the top scene without changing stack depth. Exits the current scene and mounts the new one.
+
+```js
+game.replaceScene(new GameOverScene())
+```
+
+### `peekScene()`
+
+Returns the top scene without removing it. `game.scene` is an alias for this.
+
+### `switchScene(scene)`
+
+Resets the entire stack to a single scene. Clears input, resets the clock, exits all current scenes.
+
+```js
+game.switchScene(new MenuScene())
+```
+
+### Scene Inspection
+
+```js
+game.getScene(index)      // Scene at index, or null
+game.getScenes()           // Copy of the stack array
+game.containsScene(scene)  // boolean
+game.isTopScene(scene)     // boolean
+```
+
+## Lifecycle Methods
 
 ### `pause()`
 
-Pauses the game loop. Calls `scene.pause()`. Updates stop but rendering continues.
+Pauses the game loop. Calls `scene.pause()` on the top scene. Updates stop but rendering continues.
 
 ### `resume()`
 
-Resumes the game loop. Resets the clock accumulator and `_lastTime` to prevent a delta-time spike. Calls `scene.resume()`.
+Resumes the game loop. Resets the clock accumulator to prevent delta-time spikes.
 
 ### `togglePause()`
 
@@ -68,66 +109,63 @@ Toggles between paused and resumed states.
 
 ### `destroy()`
 
-Stops the game loop, cancels `requestAnimationFrame`, disconnects the `ResizeObserver`, removes visibility and resize listeners, exits the current scene, and destroys the input context.
+Stops the game loop, disconnects observers, removes visibility/resize listeners, exits all scenes on the stack, and destroys the input context.
 
 ## UI / DOM Methods
 
 ### `refreshUI()`
 
-Re-renders the current scene's `renderUI()` output into `scene.root`.
+Re-renders the top scene's `renderUI()` output into `scene.root`.
 
 ### `patchUI(updates)`
 
-Efficiently patches text content of DOM elements by id. Only updates elements where the content has changed.
+Efficiently patches text content of DOM elements by id.
 
 ```js
-game.patchUI({
-  score: 'Score: 42',
-  lives: 'Lives: 3',
-})
+game.patchUI({ score: 'Score: 42', lives: 'Lives: 3' })
 ```
 
-## Interpolation
+## Interpolation & Auto-Pause
 
-The game loop calls `scene.interpolate(alpha)` after all fixed updates and before rendering, where `alpha = clock.alpha` (the fraction of a fixed step remaining in the accumulator). This allows smooth visual interpolation between fixed timesteps.
+As in v0.4.0: the game loop calls `scene.interpolate(alpha)` after updates and before render. Auto-pause pauses the loop when the tab is hidden.
 
-```js
-scene.interpolate = function (alpha) {
-  // smoothly interpolate sprite positions between updates
-}
-```
+## Deferred Scene Operations
 
-## Auto-Pause
-
-When `autoPause` is enabled (default), the game automatically pauses when the browser tab is hidden (`visibilitychange` event) and resumes when the tab becomes visible again. Uses `_pausedByVisibility` flag to avoid conflicting with manual `pause()`/`resume()` calls.
+Scene mutations (`pushScene`, `popScene`, `replaceScene`, `switchScene`) called during a scene's `update()` are **queued** and executed after the update cycle completes. This prevents mid-frame stack corruption.
 
 ## Viewport Scaling
 
-When `scaleToFit` is enabled, the canvas automatically scales to fill the viewport using CSS `transform`.
-
-```js
-const game = new Game({
-  width: 800,
-  height: 600,
-  scaleToFit: true,
-})
-```
-
-Also supports custom config via `{ width, height, padding, element }` and exposes CSS custom properties `--jygame-scale` and `--jygame-margin-v`.
+As in v0.4.0: CSS `transform`-based scaling via `scaleToFit` option.
 
 ## Example
 
 ```js
-const game = new Game({
-  width: 800,
-  height: 600,
-  parent: '#game-container',
-  fps: 60,
-})
+const game = new Game({ width: 800, height: 600 })
 
-const scene = new Scene()
-scene.update = dt => { /* ... */ }
-scene.render = ctx => { /* ... */ }
+class MenuScene extends Scene {
+  enter() {
+    this.on(document, 'keydown', (e) => {
+      if (e.key === 'Enter') game.pushScene(new GameScene())
+    })
+  }
+  render(ctx) {
+    ctx.fillStyle = '#2F2F2F'
+    ctx.fillRect(0, 0, 800, 600)
+  }
+}
 
-game.run(scene)
+class GameScene extends Scene {
+  enter() {
+    this.player = new Sprite(100, 100, 32, 32)
+  }
+  update(dt) {
+    movementSystem.updateOne(this.player, dt)
+  }
+  render(ctx) {
+    ctx.clearRect(0, 0, 800, 600)
+    renderSystem.renderOne(ctx, this.player)
+  }
+}
+
+game.run(new MenuScene())
 ```

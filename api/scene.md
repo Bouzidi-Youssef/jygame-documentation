@@ -1,6 +1,8 @@
 # Scene
 
-The `Scene` class organizes your game into distinct states (menu, gameplay, pause, game over) with lifecycle hooks.
+The `Scene` class organizes your game into distinct states with lifecycle hooks. Scenes are **single-use** — once exited, they must not be re-entered or re-mounted. Create a new scene instance instead.
+
+Scenes live on a **stack** managed by `Game`. By default, a scene **blocks updates** from scenes below it but does **not block rendering**.
 
 ## Constructor
 
@@ -8,20 +10,27 @@ The `Scene` class organizes your game into distinct states (menu, gameplay, paus
 const scene = new Scene()
 ```
 
-Creates `scene.root` — a `<div>` element used as the DOM UI overlay container.
+Creates `scene.root` — a `<div>` element used as the DOM UI overlay container. Sets `blocksUpdateBelow = true` and `blocksRenderBelow = false`.
+
+## Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `blocksUpdateBelow` | `boolean` | `true` | When on top, pause `update()` on scenes below |
+| `blocksRenderBelow` | `boolean` | `false` | When on top, skip `render()` on scenes below |
 
 ## Lifecycle Hooks
 
-All hooks are no-ops by default — override them on your scene instance or prototype.
+All hooks are no-ops by default. Scenes throw if `enter()` or `exit()` is called more than once.
 
 | Hook | Signature | Called When |
 |------|-----------|-------------|
-| `enter()` | `enter()` | Scene becomes active (via `game.run()` or `switchScene()`) |
-| `exit()` | `exit()` | Scene is exited — automatically runs all cleanup functions |
-| `pause()` | `pause()` | `game.pause()` is called |
-| `resume()` | `resume()` | `game.resume()` is called |
+| `enter()` | `enter()` | Scene becomes active — throws if called twice |
+| `exit()` | `exit()` | Scene is exited — runs all cleanup functions, throws if called twice |
+| `pause()` | `pause()` | Scene is paused by a scene pushed on top |
+| `resume()` | `resume()` | Scene is resumed after the scene above is popped |
 | `update(dt)` | `update(dt)` | Each fixed timestep tick |
-| `interpolate(alpha)` | `interpolate(alpha)` | After all fixed updates, before render — for smooth interpolation |
+| `interpolate(alpha)` | `interpolate(alpha)` | After all fixed updates, before render |
 | `render(ctx)` | `render(ctx)` | Each frame — receives the canvas 2D context |
 | `renderUI()` | `renderUI()` | Returns an HTML string for the DOM overlay |
 
@@ -33,30 +42,60 @@ scene.enter = () => {
 }
 
 scene.update = (dt) => {
-  this.player.x += 200 * dt
+  movementSystem.updateOne(this.player, dt)
 }
 
 scene.render = (ctx) => {
   ctx.clearRect(0, 0, 800, 600)
-  this.player.render(ctx)
+  renderSystem.renderOne(ctx, this.player)
 }
+```
 
-scene.renderUI = () => {
-  return '<div id="hud">HP: 100</div>'
+## Scene Stack Transitions
+
+| Method | Description |
+|--------|-------------|
+| `pushScene(scene)` | Push a scene on top (e.g., pause overlay) |
+| `popScene()` | Pop the current scene, resume the one below |
+| `replaceScene(scene)` | Replace the current scene in-place |
+| `switchScene(scene)` | Reset the entire stack to one scene |
+| `transitionTo(scene)` | Alias for `switchScene(scene)` |
+
+```js
+// Inside a scene method:
+this.pushScene(new PauseScene())
+this.popScene()
+this.replaceScene(new GameOverScene())
+this.switchScene(new MenuScene())
+```
+
+## Blocking
+
+When `blocksUpdateBelow = true` (default), scenes below are paused via `pause()` / `resume()`. When `blocksRenderBelow = false` (default), all visible scenes render in order from bottom to top.
+
+```js
+// A pause overlay that blocks input but lets the game render underneath
+class PauseScene extends Scene {
+  constructor() {
+    super()
+    this.blocksUpdateBelow = true
+    this.blocksRenderBelow = false
+  }
+  renderUI() {
+    return '<div class="pause-overlay">PAUSED</div>'
+  }
 }
 ```
 
 ## DOM UI
 
-The scene's `root` div is appended to `game`'s DOM overlay when the scene is active. `renderUI()` populates it.
+The scene's `root` div is appended to the game's DOM overlay when active. `renderUI()` populates it.
 
 ```js
 scene.renderUI = function () {
   return `<h1>Score: ${this.score}</h1>`
 }
 ```
-
-Call `game.refreshUI()` to re-render, or `game.patchUI({ id: 'Score: 42' })` for efficient partial updates.
 
 ## Event Listener Cleanup
 
@@ -72,16 +111,14 @@ Methods that auto-clean on `exit()`:
 ```js
 scene.enter = function () {
   this.on(document, 'keydown', this.handleKey)
-  this.onSwipe(dir => this.move(dir))
 }
 ```
 
-## Scene Transitions
+## Single-Use Enforcement
 
 ```js
-this.transitionTo(nextScene)
-// or
-this.game.switchScene(nextScene)
+game.run(scene)
+// later:
+game.run(scene)  // ❌ Error: scene already mounted
+game.switchScene(scene)  // ❌ Error: scene already exited
 ```
-
-Calls `exit()` on the current scene (triggering cleanup), then `enter()` on the new scene.

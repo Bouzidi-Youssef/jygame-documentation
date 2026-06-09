@@ -19,7 +19,7 @@ export default defineConfig({
       { text: 'API Reference', link: '/api/game' },
       { text: 'Examples', link: '/examples/' },
       {
-        text: 'v0.4.0',
+        text: 'v0.5.0',
         items: [
           { text: 'GitHub', link: 'https://github.com/Bouzidi-Youssef/Jygame' },
           { text: 'npm', link: 'https://www.npmjs.com/package/jygame' },
@@ -45,6 +45,7 @@ export default defineConfig({
           items: [
             { text: 'Game', link: '/api/game' },
             { text: 'Scene', link: '/api/scene' },
+            { text: 'Camera', link: '/api/camera' },
           ],
         },
         {
@@ -53,13 +54,16 @@ export default defineConfig({
             { text: 'Transform', link: '/api/transform' },
             { text: 'Collider', link: '/api/collider' },
             { text: 'Renderable', link: '/api/renderable' },
+            { text: 'Animation', link: '/api/animation' },
           ],
         },
         {
           text: 'Systems',
           items: [
             { text: 'MovementSystem', link: '/api/movement-system' },
+            { text: 'AnimationSystem', link: '/api/animation-system' },
             { text: 'RenderSystem', link: '/api/render-system' },
+            { text: 'CollisionSystem', link: '/api/collision-system' },
           ],
         },
         {
@@ -93,7 +97,7 @@ export default defineConfig({
         {
           text: 'Collision',
           items: [
-            { text: 'Collision', link: '/api/collision' },
+            { text: 'CollisionSystem', link: '/api/collision-system' },
             { text: 'SpatialHash', link: '/api/spatial-hash' },
           ],
         },
@@ -116,6 +120,7 @@ export default defineConfig({
           text: 'Memory',
           items: [
             { text: 'Pool', link: '/api/pool' },
+            { text: 'ActivePool', link: '/api/active-pool' },
           ],
         },
         {

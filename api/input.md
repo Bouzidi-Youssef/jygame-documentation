@@ -2,7 +2,7 @@
 
 The `Input` object is a **global facade** that delegates to the game's default `InputContext` instance. It mirrors every method of `InputContext` for convenience.
 
-The `Game` constructor automatically creates its own `InputContext`, binds it to the game container, and sets it as the default — no manual setup required.
+The `Game` constructor automatically creates its own `InputContext`, binds it to the game container, and sets it as the default.
 
 ## Pointer Position
 
@@ -17,14 +17,13 @@ The `Game` constructor automatically creates its own `InputContext`, binds it to
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `isDown(key)` | `isDown('UP')` | Is the key currently held? |
-| `justPressed(key)` | `justPressed('SPACE')` | Was the key pressed this frame? Cleared mid-loop. |
-| `justReleased(key)` | `justReleased('ENTER')` | Was the key released this frame? Cleared each frame. |
+| `isDown(key)` | `isDown('UP')` | Is the key or action currently held? |
+| `justPressed(key)` | `justPressed('SPACE')` | Was the key or action pressed this frame? |
+| `justReleased(key)` | `justReleased('ENTER')` | Was the key or action released this frame? |
 
 ```js
-if (Input.isDown('RIGHT')) player.x += 200 * dt
+if (Input.isDown('RIGHT')) player.velocity.x = 200
 if (Input.justPressed('SPACE')) player.jump()
-if (Input.justReleased('ENTER')) confirm()
 ```
 
 ## Default Key Mappings
@@ -49,27 +48,32 @@ if (Input.justReleased('ENTER')) confirm()
 | `resetKeyMap()` | `resetKeyMap()` | Restores the default map |
 | `getKeyMap()` | `getKeyMap()` | Returns a copy of the current map |
 
+## Action Bindings
+
+Bind multiple keys to a single logical action. `isDown`/`justPressed`/`justReleased` check both the key name directly and all keys bound to the action.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `bind(action, input)` | `bind('JUMP', 'SPACE')` | Binds a key to an action |
+| `unbind(action, input)` | `unbind('JUMP', 'SPACE')` | Removes a key from an action |
+| `getBindings(action)` | `getBindings('JUMP')` | Returns all keys bound to an action |
+| `clearBindings(action)` | `clearBindings('JUMP')` | Removes all bindings for an action |
+
 ```js
-Input.mapKey('z', 'FIRE')
-Input.mapKey('x', 'JUMP')
-if (Input.justPressed('FIRE')) shoot()
+Input.bind('JUMP', 'SPACE')
+Input.bind('JUMP', 'W')
+Input.justPressed('JUMP')  // true if SPACE or W was just pressed
+
+const bindings = Input.getBindings('JUMP')  // ['SPACE', 'W']
 ```
 
 ## Pointer API
 
-Unified mouse, touch, and pen input via the Pointer Events API with multi-touch support.
-
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `getPointer(id)` | `getPointer(0)` | Returns pointer data `{ id, x, y, startX, startY, startTime, pointerType }` or `null` |
-| `getPointers()` | `getPointers()` | Returns all active pointers as an array |
+| `getPointer(id)` | `getPointer(0)` | Returns pointer data or `null` |
+| `getPointers()` | `getPointers()` | Returns iterator over active pointers (zero-alloc) |
 | `forEachPointer(fn)` | `forEachPointer(p => ...)` | Iterates over all active pointers |
-
-```js
-Input.forEachPointer(p => {
-  console.log(`Pointer ${p.id}: (${p.x}, ${p.y})`)
-})
-```
 
 ## Gesture Listeners
 
@@ -80,18 +84,6 @@ Input.forEachPointer(p => {
 | `onTap(callback)` | `onTap(({x, y}) => ...)` | Register tap listener, returns unsubscribe |
 | `removeTap(callback)` | `removeTap(fn)` | Remove a specific tap listener |
 
-Swipe minimum distance: 30px. Tap max time: 300ms, max movement: 30px (configurable via `InputContext`).
-
-```js
-Input.onSwipe(dir => {
-  // dir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'
-})
-
-Input.onTap(({ x, y }) => {
-  // use client coordinates
-})
-```
-
 ## Key Buffer
 
 | Method | Description |
@@ -99,22 +91,9 @@ Input.onTap(({ x, y }) => {
 | `consumeBuffer()` | Shifts and returns the first buffered key, or `null` |
 | `peekBuffer()` | Returns the first buffered key without removing, or `null` |
 
-```js
-Input.consumeBuffer()  // 'UP' | null
-```
-
 ## Default Context
 
 | Method | Description |
 |--------|-------------|
 | `setDefault(ctx)` | Replaces the default `InputContext` instance |
 | `getDefault()` | Returns the current default `InputContext` |
-
-The game's built-in `InputContext` is automatically set as default. You can access it via `game.input` to add per-instance listeners:
-
-```js
-const scene = new Scene()
-scene.enter = function () {
-  game.input.onSwipe(dir => this.move(dir))
-}
-```

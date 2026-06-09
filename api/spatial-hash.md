@@ -1,6 +1,6 @@
 # SpatialHash
 
-A spatial partitioning data structure for broad-phase collision detection. Divides the world into a grid of cells and only checks pairs of sprites that occupy the same or adjacent cells, significantly reducing collision checks in large groups.
+A spatial partitioning data structure for broad-phase collision detection. Organized as a grid of cells; only entities in the same or adjacent cells are checked against each other.
 
 ## Constructor
 
@@ -12,68 +12,67 @@ new SpatialHash(cellSize)
 |-----------|------|---------|-------------|
 | `cellSize` | `number` | `64` | Width and height of each grid cell in pixels |
 
-Larger cell sizes use more memory but require fewer cell lookups. Smaller cell sizes reduce false-positive pair checks. Default `64` works well for most games.
-
 ## Methods
 
-### `rebuild(sprites)`
+### `rebuild(entities)`
 
 ```js
-spatialHash.rebuild(sprites)
+spatialHash.rebuild(entities)
 ```
 
-Clears all cells and re-inserts the given array of sprites. Each sprite is assigned a unique `__shId` for duplicate prevention. Invisible sprites are skipped.
+Clears all cells and re-inserts the given array of entities (any objects with `transform`, `collider`, and `visible`). Invisible entities are skipped. Each entity gets `__shId` and `__shStamp` internal fields.
 
 ### `collideRect(rect, out?)`
 
 ```js
-spatialHash.collideRect(rect)       // Sprite[]
-spatialHash.collideRect(rect, out)  // Sprite[]
+spatialHash.collideRect(rect)       // Entity[]
+spatialHash.collideRect(rect, out)  // Entity[]
 ```
 
-Returns sprites whose AABB overlaps the given rect-like object `{ left, right, top, bottom }`.
+Returns entities whose AABB overlaps the given rect-like object `{ left, right, top, bottom }`. Uses stamp-based duplicate prevention (zero-alloc).
 
 ### `collidePoint(point, out?)`
 
 ```js
-spatialHash.collidePoint({ x, y })      // Sprite[]
-spatialHash.collidePoint({ x, y }, out) // Sprite[]
+spatialHash.collidePoint({ x, y })      // Entity[]
+spatialHash.collidePoint({ x, y }, out) // Entity[]
 ```
 
-Returns sprites whose AABB contains the given point.
+Returns entities whose AABB contains the point.
 
-### `collideGroup(other, out?)`
+### `collideGroup(other, cbOrOut?)`
 
 ```js
-spatialHash.collideGroup(otherHash)      // [spriteA, spriteB][]
-spatialHash.collideGroup(otherHash, out) // [spriteA, spriteB][]
+// Returns array of pairs
+const pairs = spatialHash.collideGroup(otherHash)
+pairs.forEach(([a, b]) => { /* ... */ })
+
+// Or use a callback (zero-alloc)
+spatialHash.collideGroup(otherHash, (a, b) => {
+  a.kill()
+  b.health--
+})
 ```
 
-Returns all colliding sprite pairs between two `SpatialHash` instances. Uses a `Set` to prevent duplicate pairs.
+Returns all colliding entity pairs between two `SpatialHash` instances. Accepts either an output array or a callback function.
 
-### `collideSprite(sprite, out?)`
+### `collideSprite(entity, out?)`
 
 ```js
-spatialHash.collideSprite(sprite)      // Sprite[]
-spatialHash.collideSprite(sprite, out) // Sprite[]
+spatialHash.collideSprite(entity)      // Entity[]
+spatialHash.collideSprite(entity, out) // Entity[]
 ```
 
-Returns sprites colliding with the given sprite (excluding the sprite itself when it belongs to the hash).
+Returns entities colliding with the given entity (excluding itself). Works with any entity, not just sprites.
 
-## Usage with Group
+## Usage with CollisionSystem
 
-`SpatialHash` integrates with `Group` directly — no manual management needed:
+`CollisionSystem` manages spatial hash lifecycle — `beginFrame()` calls `rebuild()` on all registered groups:
 
 ```js
-const enemies = new Group()
-enemies.useSpatialHash(64)  // enables spatial hashing
-
-// On each update, the hash is automatically rebuilt
-enemies.update(dt)
-
-// Collision queries use the spatial hash automatically
-const hits = enemies.collideRect(playerRect)
-enemies.collideGroup(otherGroup).forEach(([a, b]) => { ... })
+collisionSystem.useSpatialHash(enemies, enemies)
+collisionSystem.beginFrame()     // rebuilds all hashes
+collisionSystem.collideRect(enemies, rect)
 ```
 
 ## Standalone Usage
@@ -82,7 +81,7 @@ enemies.collideGroup(otherGroup).forEach(([a, b]) => { ... })
 import { SpatialHash } from 'jygame'
 
 const hash = new SpatialHash(64)
-hash.rebuild(allSprites)
+hash.rebuild(allEntities)
 
 const nearby = hash.collideRect({ left: 0, right: 100, top: 0, bottom: 100 })
 ```

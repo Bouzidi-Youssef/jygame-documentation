@@ -15,7 +15,7 @@ import { Game } from 'https://unpkg.com/jygame@latest/jygame.js'
 ## Your First Game
 
 ```js
-import { Game, Scene, Sprite, Input } from 'jygame'
+import { Game, Scene, Sprite, Input, movementSystem, renderSystem } from 'jygame'
 
 const scene = new Scene()
 
@@ -25,15 +25,20 @@ scene.enter = function () {
 }
 
 scene.update = function (dt) {
-  if (Input.isDown('RIGHT')) this.player.x += 200 * dt
-  if (Input.isDown('LEFT')) this.player.x -= 200 * dt
-  if (Input.isDown('UP')) this.player.y -= 200 * dt
-  if (Input.isDown('DOWN')) this.player.y += 200 * dt
+  if (Input.isDown('RIGHT')) this.player.velocity.x = 200
+  else if (Input.isDown('LEFT')) this.player.velocity.x = -200
+  else this.player.velocity.x = 0
+
+  if (Input.isDown('UP')) this.player.velocity.y = -200
+  else if (Input.isDown('DOWN')) this.player.velocity.y = 200
+  else this.player.velocity.y = 0
+
+  movementSystem.updateOne(this.player, dt)
 }
 
 scene.render = function (ctx) {
   ctx.clearRect(0, 0, 800, 600)
-  this.player.render(ctx)
+  renderSystem.renderOne(ctx, this.player)
 }
 
 const game = new Game({

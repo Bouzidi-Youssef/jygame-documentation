@@ -1,8 +1,8 @@
 # InputContext
 
-Instance-based input handler that the `Game` class creates automatically. Uses the **Pointer Events API** (unified mouse, touch, and pen) and `Map`-based key state tracking with multi-touch support.
+Instance-based input handler using the **Pointer Events API** (unified mouse, touch, and pen), `Map`-based key state, multi-touch support, and **action bindings** for grouping multiple keys under logical names.
 
-You normally interact through the global `Input` facade, which delegates to the game's default `InputContext`.
+The `Game` class creates one automatically — you normally interact through the global `Input` facade.
 
 ## Constructor
 
@@ -38,9 +38,9 @@ const ctx = new InputContext(options)
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `isDown(key)` | `isDown('UP')` | Is the key currently held? |
-| `justPressed(key)` | `justPressed('SPACE')` | Was the key pressed this frame? Cleared mid-loop. |
-| `justReleased(key)` | `justReleased('ENTER')` | Was the key released this frame? Cleared each frame. |
+| `isDown(key)` | `isDown('UP')` | Is the key or action currently held? |
+| `justPressed(key)` | `justPressed('SPACE')` | Was the key or action pressed this frame? |
+| `justReleased(key)` | `justReleased('ENTER')` | Was the key or action released this frame? |
 
 ### Key Mapping
 
@@ -52,12 +52,31 @@ const ctx = new InputContext(options)
 | `resetKeyMap()` | `resetKeyMap()` | Restores the default map |
 | `getKeyMap()` | `getKeyMap()` | Returns a copy of the current map |
 
+### Action Bindings
+
+Action bindings let you group multiple keys under one logical action name. For example, bind both `SPACE` and `W` to `JUMP`, then query `isDown('JUMP')`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `bind(action, input)` | `bind('JUMP', 'SPACE')` | Binds a key to an action |
+| `unbind(action, input)` | `unbind('JUMP', 'SPACE')` | Removes a key from an action |
+| `getBindings(action)` | `getBindings('JUMP')` | Returns all keys bound to an action |
+| `clearBindings(action)` | `clearBindings('JUMP')` | Removes all bindings for an action |
+
+```js
+ctx.bind('FIRE', 'z')
+ctx.bind('FIRE', 'x')
+ctx.bind('FIRE', 'ENTER')
+ctx.isDown('FIRE')     // true if z, x, or ENTER is held
+ctx.justPressed('FIRE')
+```
+
 ### Pointer API
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `getPointer(id)` | `getPointer(0)` | Returns pointer data `{ id, x, y, startX, startY, startTime, pointerType }` or `null` |
-| `getPointers()` | `getPointers()` | Returns all active pointers as an array |
+| `getPointer(id)` | `getPointer(0)` | Returns pointer data or `null` |
+| `getPointers()` | `getPointers()` | Returns iterator over active pointers (zero-alloc) |
 | `forEachPointer(fn)` | `forEachPointer(p => ...)` | Iterates over all active pointers |
 
 ### Gesture Listeners
@@ -68,20 +87,6 @@ const ctx = new InputContext(options)
 | `removeSwipe(callback)` | `removeSwipe(fn)` | Remove a specific swipe listener |
 | `onTap(callback)` | `onTap(({x, y}) => ...)` | Register tap listener, returns unsubscribe |
 | `removeTap(callback)` | `removeTap(fn)` | Remove a specific tap listener |
-
-### Key Buffer
-
-| Method | Description |
-|--------|-------------|
-| `consumeBuffer()` | Shifts and returns the first buffered key, or `null` |
-| `peekBuffer()` | Returns the first buffered key without removing, or `null` |
-
-### Frame State
-
-| Method | Description |
-|--------|-------------|
-| `updateFrame()` | Clears `justPressed` and `justReleased` (called at end of each game loop) |
-| `clearJustPressed()` | Clears `justPressed` (called mid-loop between multiple fixed ticks) |
 
 ## Default Key Mappings
 
@@ -103,7 +108,7 @@ import { InputContext } from 'jygame'
 const input = new InputContext({ swipeThreshold: 20 })
 input.init(document.getElementById('game'))
 
-if (input.isDown('UP')) { /* ... */ }
-input.onSwipe(dir => console.log('Swiped:', dir))
-input.onTap(({ x, y }) => console.log('Tapped:', x, y))
+input.bind('JUMP', 'SPACE')
+input.bind('JUMP', 'W')
+if (input.justPressed('JUMP')) player.jump()
 ```
