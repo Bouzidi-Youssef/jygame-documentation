@@ -46,6 +46,7 @@ export default defineConfig({
             { text: 'Game', link: '/api/game' },
             { text: 'Scene', link: '/api/scene' },
             { text: 'Camera', link: '/api/camera' },
+            { text: 'LoadingTask', link: '/api/loading-task' },
           ],
         },
         {
@@ -64,6 +65,13 @@ export default defineConfig({
             { text: 'AnimationSystem', link: '/api/animation-system' },
             { text: 'RenderSystem', link: '/api/render-system' },
             { text: 'CollisionSystem', link: '/api/collision-system' },
+          ],
+        },
+        {
+          text: 'Particle System',
+          items: [
+            { text: 'Particle System', link: '/api/particle-system' },
+            { text: 'Particle Modifiers', link: '/api/particle-modifiers' },
           ],
         },
         {
@@ -109,11 +117,11 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Assets',
+          text: 'Loaders',
           items: [
             { text: 'ImageLoader', link: '/api/image-loader' },
             { text: 'FontLoader', link: '/api/font-loader' },
-            { text: 'LoadingTask', link: '/api/loading-task' },
+            { text: 'AudioLoader', link: '/api/audio-loader' },
           ],
         },
         {
@@ -121,13 +129,6 @@ export default defineConfig({
           items: [
             { text: 'Pool', link: '/api/pool' },
             { text: 'ActivePool', link: '/api/active-pool' },
-          ],
-        },
-        {
-          text: 'Particle System',
-          items: [
-            { text: 'Particle System', link: '/api/particle-system' },
-            { text: 'Particle Modifiers', link: '/api/particle-modifiers' },
           ],
         },
         {
